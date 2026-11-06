@@ -1,0 +1,384 @@
+[
+  {
+    "id": "tab_porta_acessivel",
+    "type": "tab",
+    "label": "Sistema Multissensorial - Porta Acessivel",
+    "disabled": false,
+    "info": "Fluxo Node-RED completo para o Projeto de Extensão UNINASSAU:\nSistema Multissensorial de Sinalização e Acessibilidade para Portas de Banheiro (ESP32 + MQTT)."
+  },
+  {
+    "id": "mqtt_broker_config",
+    "type": "mqtt-broker",
+    "name": "Broker MQTT (HiveMQ / Mosquitto)",
+    "broker": "broker.hivemq.com",
+    "port": "1883",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true
+  },
+  {
+    "id": "ui_tab_acessibilidade",
+    "type": "ui_tab",
+    "name": "Banheiro Acessível - UNINASSAU",
+    "icon": "fa-universal-access",
+    "order": 1,
+    "disabled": false,
+    "hidden": false
+  },
+  {
+    "id": "ui_group_sinalizacao",
+    "type": "ui_group",
+    "name": "Sinalização de Acessibilidade",
+    "tab": "ui_tab_acessibilidade",
+    "order": 1,
+    "disp": true,
+    "width": "6",
+    "collapse": false
+  },
+  {
+    "id": "ui_group_estatisticas",
+    "type": "ui_group",
+    "name": "Painel de Estatísticas e Segurança",
+    "tab": "ui_tab_acessibilidade",
+    "order": 2,
+    "disp": true,
+    "width": "6",
+    "collapse": false
+  },
+  {
+    "id": "mqtt_in_estado",
+    "type": "mqtt in",
+    "z": "tab_porta_acessivel",
+    "name": "Receber Estado ESP32 (MQTT)",
+    "topic": "uninassau/acessibilidade/banheiro01/estado",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "mqtt_broker_config",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 170,
+    "y": 120,
+    "wires": [
+      [
+        "fn_processar_estado"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_out_comando",
+    "type": "mqtt out",
+    "z": "tab_porta_acessivel",
+    "name": "Enviar Comando ESP32 (MQTT)",
+    "topic": "uninassau/acessibilidade/banheiro01/comando",
+    "qos": "1",
+    "retain": "false",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "mqtt_broker_config",
+    "x": 450,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "ui_btn_simular_tag",
+    "type": "ui_button",
+    "z": "tab_porta_acessivel",
+    "name": "Simular Passar Tag RFID",
+    "group": "ui_group_sinalizacao",
+    "order": 2,
+    "width": "6",
+    "height": "1",
+    "passthru": false,
+    "label": "🏷️ SIMULAR PASSAR TAG RFID (TOGGLE)",
+    "tooltip": "Simula a leitura de uma Tag RFID para trancar ou destrancar a porta",
+    "color": "#FFFFFF",
+    "bgcolor": "#1565C0",
+    "className": "",
+    "icon": "fa-id-card",
+    "payload": "TOGGLE",
+    "payloadType": "str",
+    "topic": "comando",
+    "topicType": "str",
+    "x": 160,
+    "y": 320,
+    "wires": [
+      [
+        "mqtt_out_comando",
+        "fn_simulador_interno"
+      ]
+    ]
+  },
+  {
+    "id": "fn_simulador_interno",
+    "type": "function",
+    "z": "tab_porta_acessivel",
+    "name": "Simular Resposta Local (Fallback)",
+    "func": "const ocupadoAtual = flow.get('portaOcupada') || false;\nconst novoOcupado = !ocupadoAtual;\nconst agora = Math.floor(Date.now() / 1000);\nlet duracao = 0;\n\nif (!novoOcupado) {\n    const inicio = flow.get('inicioOcupacaoTs') || agora;\n    duracao = Math.max(1, agora - inicio);\n}\n\nmsg.payload = {\n    estado: novoOcupado ? 'FECHADA' : 'ABERTA',\n    ocupado: novoOcupado,\n    uid_tag: 'SIMULADO:NODE-RED',\n    duracao_ultimo_uso_seg: duracao,\n    origem: 'NODE_RED_SIMULADOR',\n    timestamp: agora\n};\n\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 460,
+    "y": 240,
+    "wires": [
+      [
+        "fn_processar_estado"
+      ]
+    ]
+  },
+  {
+    "id": "ui_switch_modo_teste",
+    "type": "ui_switch",
+    "z": "tab_porta_acessivel",
+    "name": "Modo Apresentação (Alerta 30s)",
+    "label": "⚡ Modo Apresentação (Alerta de Emergência em 30s)",
+    "tooltip": "Reduz o tempo de alerta de segurança para 30 segundos durante a apresentação",
+    "group": "ui_group_sinalizacao",
+    "order": 3,
+    "width": "6",
+    "height": "1",
+    "passthru": true,
+    "decouple": "false",
+    "topic": "modo_teste",
+    "topicType": "str",
+    "style": "",
+    "onvalue": "true",
+    "onvalueType": "bool",
+    "onicon": "",
+    "oncolor": "",
+    "offvalue": "false",
+    "offvalueType": "bool",
+    "officon": "",
+    "offcolor": "",
+    "animate": true,
+    "x": 180,
+    "y": 400,
+    "wires": [
+      [
+        "fn_config_limite"
+      ]
+    ]
+  },
+  {
+    "id": "fn_config_limite",
+    "type": "function",
+    "z": "tab_porta_acessivel",
+    "name": "Atualizar Limite de Emergência",
+    "func": "const modoTeste = Boolean(msg.payload);\nflow.set('limiteEmergenciaSeg', modoTeste ? 30 : 900);\nreturn null;",
+    "outputs": 0,
+    "noerr": 0,
+    "x": 470,
+    "y": 400,
+    "wires": []
+  },
+  {
+    "id": "inject_cronometro_1s",
+    "type": "inject",
+    "z": "tab_porta_acessivel",
+    "name": "Tick 1 Segundo (Cronômetro)",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "1",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "0.5",
+    "topic": "tick",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 480,
+    "wires": [
+      [
+        "fn_cronometro_emergencia"
+      ]
+    ]
+  },
+  {
+    "id": "fn_processar_estado",
+    "type": "function",
+    "z": "tab_porta_acessivel",
+    "name": "Processar Estado e Estatísticas",
+    "func": "let dados = msg.payload;\nif (typeof dados === 'string') {\n    try {\n        dados = JSON.parse(dados);\n    } catch (e) {\n        dados = { estado: dados.trim().toUpperCase() };\n    }\n}\n\nconst estadoStr = (dados.estado || 'ABERTA').toUpperCase();\nconst portaFechada = (estadoStr === 'FECHADA' || estadoStr === 'OCUPADO' || dados.ocupado === true);\nconst estadoAnterior = flow.get('portaOcupada');\nconst agora = Math.floor(Date.now() / 1000);\n\nflow.set('portaOcupada', portaFechada);\n\nlet usosHoje = flow.get('usosHoje') || 0;\nlet somaDuracoes = flow.get('somaDuracoes') || 0;\n\nif (portaFechada && estadoAnterior !== true) {\n    flow.set('inicioOcupacaoTs', agora);\n} else if (!portaFechada && estadoAnterior === true) {\n    let duracao = Number(dados.duracao_ultimo_uso_seg) || 0;\n    if (duracao <= 0) {\n        const inicio = flow.get('inicioOcupacaoTs') || agora;\n        duracao = Math.max(1, agora - inicio);\n    }\n    usosHoje += 1;\n    somaDuracoes += duracao;\n    flow.set('usosHoje', usosHoje);\n    flow.set('somaDuracoes', somaDuracoes);\n    flow.set('inicioOcupacaoTs', 0);\n}\n\nconst mediaSeg = usosHoje > 0 ? Math.round(somaDuracoes / usosHoje) : 0;\nconst minMedia = Math.floor(mediaSeg / 60);\nconst segMedia = mediaSeg % 60;\nconst textoMedia = `${minMedia}m ${segMedia}s`;\n\nconst msgCard = {\n    payload: {\n        fechada: portaFechada,\n        titulo: portaFechada ? 'OCUPADO / PORTA FECHADA' : 'LIVRE / PORTA ABERTA',\n        subtitulo: portaFechada\n            ? 'Servo 90° | Vibração 600ms | Buzzer 500ms'\n            : 'Servo 0° | Vibração 2x 150ms | Buzzer 2x 150ms',\n        emergencia: false\n    }\n};\n\nconst msgUsos = {\n    payload: `${usosHoje} uso(s) hoje`\n};\n\nconst msgMedia = {\n    payload: textoMedia\n};\n\nconst msgGrafico = !portaFechada && estadoAnterior === true ? {\n    topic: 'Usos por Horário',\n    payload: usosHoje\n} : null;\n\nreturn [msgCard, msgUsos, msgMedia, msgGrafico];",
+    "outputs": 4,
+    "noerr": 0,
+    "initialize": "flow.set('portaOcupada', false);\nflow.set('usosHoje', 0);\nflow.set('somaDuracoes', 0);\nflow.set('limiteEmergenciaSeg', 30);",
+    "finalize": "",
+    "libs": [],
+    "x": 490,
+    "y": 120,
+    "wires": [
+      [
+        "ui_template_cadeado"
+      ],
+      [
+        "ui_text_usos"
+      ],
+      [
+        "ui_text_media"
+      ],
+      [
+        "ui_chart_horarios"
+      ]
+    ]
+  },
+  {
+    "id": "fn_cronometro_emergencia",
+    "type": "function",
+    "z": "tab_porta_acessivel",
+    "name": "Atualizar Cronômetro e Checar Emergência",
+    "func": "const portaFechada = flow.get('portaOcupada') || false;\nconst inicio = flow.get('inicioOcupacaoTs') || 0;\nconst limite = flow.get('limiteEmergenciaSeg') || 30;\n\nif (!portaFechada || inicio === 0) {\n    return [\n        { payload: '00:00 (Porta Livre)' },\n        { payload: '🟢 Normal (Sem alertas)' }\n    ];\n}\n\nconst agora = Math.floor(Date.now() / 1000);\nconst decorrido = Math.max(0, agora - inicio);\nconst min = String(Math.floor(decorrido / 60)).padStart(2, '0');\nconst seg = String(decorrido % 60).padStart(2, '0');\n\nconst emEmergencia = decorrido >= limite;\nconst textoStatus = emEmergencia\n    ? `🚨 ALERTA DE EMERGÊNCIA! Porta trancada há mais de ${limite}s!`\n    : `🔒 Ocupado dentro do tempo normal (Limite: ${limite}s)`;\n\nreturn [\n    { payload: `${min}:${seg}` },\n    { payload: textoStatus }\n];",
+    "outputs": 2,
+    "noerr": 0,
+    "x": 490,
+    "y": 480,
+    "wires": [
+      [
+        "ui_text_cronometro"
+      ],
+      [
+        "ui_text_emergencia"
+      ]
+    ]
+  },
+  {
+    "id": "ui_template_cadeado",
+    "type": "ui_template",
+    "z": "tab_porta_acessivel",
+    "group": "ui_group_sinalizacao",
+    "name": "Card Gigante Cadeado Verde/Vermelho",
+    "order": 1,
+    "width": "6",
+    "height": "6",
+    "format": "<div style=\"display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;border-radius:16px;padding:20px;text-align:center;color:#ffffff;font-family:sans-serif;transition:all 0.3s ease;background-color:{{msg.payload.fechada ? '#C62828' : '#1B5E20'}};border:5px solid {{msg.payload.fechada ? '#FF5252' : '#69F0AE'}};\">\n  <div style=\"font-size:96px;line-height:1;margin-bottom:12px;\">\n    {{msg.payload.fechada ? '🔒' : '🔓'}}\n  </div>\n  <div style=\"font-size:28px;font-weight:900;letter-spacing:1px;\">\n    {{msg.payload.titulo || 'LIVRE / PORTA ABERTA'}}\n  </div>\n  <div style=\"font-size:14px;opacity:0.9;margin-top:10px;\">\n    {{msg.payload.subtitulo || 'Aguardando leitura de Tag RFID RC522...'}}\n  </div>\n</div>",
+    "storeOutMessages": true,
+    "fwdInMessages": true,
+    "resendOnRefresh": true,
+    "templateScope": "local",
+    "className": "",
+    "x": 830,
+    "y": 60,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ui_text_usos",
+    "type": "ui_text",
+    "z": "tab_porta_acessivel",
+    "group": "ui_group_estatisticas",
+    "order": 1,
+    "width": "3",
+    "height": "1",
+    "name": "Contador de Usos Hoje",
+    "label": "📊 Usos Hoje:",
+    "format": "{{msg.payload}}",
+    "layout": "col-center",
+    "x": 810,
+    "y": 180,
+    "wires": []
+  },
+  {
+    "id": "ui_text_media",
+    "type": "ui_text",
+    "z": "tab_porta_acessivel",
+    "group": "ui_group_estatisticas",
+    "order": 2,
+    "width": "3",
+    "height": "1",
+    "name": "Tempo Médio de Ocupação",
+    "label": "⏱️ Tempo Médio:",
+    "format": "{{msg.payload}}",
+    "layout": "col-center",
+    "x": 820,
+    "y": 240,
+    "wires": []
+  },
+  {
+    "id": "ui_text_cronometro",
+    "type": "ui_text",
+    "z": "tab_porta_acessivel",
+    "group": "ui_group_estatisticas",
+    "order": 3,
+    "width": "6",
+    "height": "1",
+    "name": "Cronômetro Porta Trancada",
+    "label": "⏳ Tempo Trancada Agora:",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "x": 820,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "ui_text_emergencia",
+    "type": "ui_text",
+    "z": "tab_porta_acessivel",
+    "group": "ui_group_estatisticas",
+    "order": 4,
+    "width": "6",
+    "height": "1",
+    "name": "Alerta de Segurança",
+    "label": "🛡️ Segurança:",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "x": 800,
+    "y": 500,
+    "wires": []
+  },
+  {
+    "id": "ui_chart_horarios",
+    "type": "ui_chart",
+    "z": "tab_porta_acessivel",
+    "name": "Gráfico de Usos",
+    "group": "ui_group_estatisticas",
+    "order": 5,
+    "width": "6",
+    "height": "4",
+    "label": "📈 Histórico de Usos (Controle de Limpeza)",
+    "chartType": "bar",
+    "legend": "false",
+    "xformat": "HH:mm:ss",
+    "interpolate": "linear",
+    "nodata": "Aguardando ciclos de uso do banheiro...",
+    "dot": false,
+    "ymin": "0",
+    "ymax": "",
+    "removeOlder": 24,
+    "removeOlderPoints": "",
+    "removeOlderUnit": "3600",
+    "cutout": 0,
+    "useOneColor": true,
+    "useUTC": false,
+    "colors": [
+      "#1E88E5",
+      "#aec7e8",
+      "#ff7f0e",
+      "#2ca02c",
+      "#98df8a",
+      "#d62728",
+      "#ff9896",
+      "#9467bd",
+      "#c5b0d5"
+    ],
+    "outputs": 1,
+    "useDifferentColor": false,
+    "x": 790,
+    "y": 300,
+    "wires": [
+      []
+    ]
+  }
+]

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sinalizacao da Porta</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body class="page-porta" data-page="porta">
+  <main id="portaViewport" class="porta-viewport state-open" role="status" aria-live="polite">
+    <div class="porta-lock-container" aria-hidden="true">
+      <!-- Cadeado Aberto Arredondado (Branco sobre fundo Verde) -->
+      <svg id="svgLockOpen" class="porta-lock-svg" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M68 88V58C68 38.1177 84.1177 22 104 22C121.486 22 136.059 34.4663 139.318 51"
+          stroke="#FFFFFF"
+          stroke-width="18"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <rect x="40" y="86" width="120" height="92" rx="26" fill="#FFFFFF" />
+        <circle cx="100" cy="124" r="11" class="lock-keyhole-fill" />
+        <path d="M100 132V150" class="lock-keyhole-stroke" stroke-width="10" stroke-linecap="round" />
+      </svg>
+
+      <!-- Cadeado Fechado Arredondado (Branco sobre fundo Vermelho) -->
+      <svg id="svgLockClosed" class="porta-lock-svg hidden" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M64 88V58C64 38.1177 80.1177 22 100 22C119.882 22 136 38.1177 136 58V88"
+          stroke="#FFFFFF"
+          stroke-width="18"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <rect x="40" y="86" width="120" height="92" rx="26" fill="#FFFFFF" />
+        <circle cx="100" cy="124" r="11" class="lock-keyhole-fill" />
+        <path d="M100 132V150" class="lock-keyhole-stroke" stroke-width="10" stroke-linecap="round" />
+      </svg>
+    </div>
+
+    <h1 id="portaPrimaryText" class="porta-primary-text">LIVRE</h1>
+    <p id="portaSecondaryText" class="porta-secondary-text">PORTA ABERTA</p>
+
+    <div id="portaEmergencyStrip" class="porta-emergency-strip hidden" role="alert">
+      ALERTA DE EMERGENCIA - TEMPO EXCEDIDO
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel de Monitoramento</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body data-page="dashboard">
+  <div class="dashboard-container">
+    <!-- Topo Sóbrio -->
+    <header class="dash-topbar">
+      <h1 class="dash-title">Painel de Monitoramento</h1>
+      <div class="dash-topbar-actions">
+        <a href="porta.html" target="_blank" rel="noopener" class="btn btn-open-porta">
+          Abrir Tela da Porta em Nova Aba
+        </a>
+      </div>
+    </header>
+
+    <!-- Faixa de Alerta de Emergência (visível apenas quando excede o tempo limite) -->
+    <div id="dashEmergencyBox" class="dash-emergency-alert hidden" role="alert">
+      <div>
+        <strong>Alerta de Emergencia: Tempo Limite Excedido</strong>
+        <p id="dashEmergencyText">A porta permaneceu trancada alem do limite configurado.</p>
+      </div>
+      <button id="btnEmergencyUnlock" class="btn" type="button">
+        Destrancar Porta
+      </button>
+    </div>
+
+    <!-- Estatísticas Diretas -->
+    <section class="kpi-row" aria-label="Indicadores">
+      <div class="kpi-box">
+        <span class="kpi-title">Estado da Porta</span>
+        <strong id="kpiDoorState" class="kpi-value state-open-text">ABERTA</strong>
+        <span id="kpiCronometroLabel" class="kpi-meta">Cronometro: 00:00</span>
+      </div>
+
+      <div class="kpi-box">
+        <span class="kpi-title">Usos no Dia</span>
+        <strong id="kpiUsesToday" class="kpi-value">0</strong>
+        <span id="kpiDateToday" class="kpi-meta">Hoje</span>
+      </div>
+
+      <div class="kpi-box">
+        <span class="kpi-title">Tempo Medio de Ocupacao</span>
+        <strong id="kpiAvgTime" class="kpi-value">00m 00s</strong>
+        <span id="kpiLastDuration" class="kpi-meta">Ultimo uso: --</span>
+      </div>
+
+      <div class="kpi-box">
+        <span class="kpi-title">Status</span>
+        <strong id="kpiSafetyStatus" class="kpi-value state-open-text">NORMAL</strong>
+        <span id="kpiAlertsCount" class="kpi-meta">0 alertas hoje</span>
+      </div>
+    </section>
+
+    <!-- Área Centralizada de Simulação e Configurações -->
+    <section class="controls-panel" aria-label="Configuracoes e Simulacao">
+      <h2 class="section-heading">Controle e Configuracoes</h2>
+
+      <div class="controls-grid">
+        <!-- Coluna 1: Botões de Ação e Simulação -->
+        <div class="control-block">
+          <div class="button-group">
+            <button id="btnSimulateRfid" class="btn btn-primary" type="button">
+              Simular Tag RFID
+            </button>
+            <button id="btnLoadDemoData" class="btn" type="button">
+              Carregar Dados
+            </button>
+            <button id="btnResetData" class="btn" type="button">
+              Zerar Dados
+            </button>
+          </div>
+
+          <div class="config-row">
+            <label class="checkbox-label" for="chkBuzzerEnabled">
+              <input type="checkbox" id="chkBuzzerEnabled" checked />
+              <span>Ativar Som do Buzzer (1 bipe ao fechar / 2 bipes ao abrir)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Coluna 2: Limite de Emergência e Broker MQTT -->
+        <div class="control-block">
+          <div class="config-row">
+            <label class="config-label" for="inputMaxMinutes">Alerta de Emergencia (min):</label>
+            <input id="inputMaxMinutes" type="number" min="1" max="120" value="15" class="input-field input-number" />
+            <label class="checkbox-label" for="chkTest30s">
+              <input type="checkbox" id="chkTest30s" checked />
+              <span>Teste Rapido (30s)</span>
+            </label>
+          </div>
+
+          <div class="config-row">
+            <label class="config-label" for="mqttBrokerSelect">Broker MQTT:</label>
+            <select id="mqttBrokerSelect" class="select-field">
+              <option value="wss://broker.hivemq.com:8884/mqtt">Broker Publico (HiveMQ WSS)</option>
+              <option value="ws://localhost:9001">Mosquitto Local (ws://localhost:9001)</option>
+              <option value="local">Somente Local (Sem Broker)</option>
+            </select>
+            <span id="mqttStatusBadge" class="mqtt-badge disconnected">Local</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Gráfico de Usos por Horário e Tabela de Histórico -->
+    <section class="data-grid" aria-label="Grafico e Historico">
+      <div class="data-box">
+        <div class="box-header">
+          <h2>Usos por Horario</h2>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="hourlyUsageChart"></canvas>
+        </div>
+      </div>
+
+      <div class="data-box">
+        <div class="box-header">
+          <h2>Historico de Dias</h2>
+          <select id="historyDaySelect" class="select-field" aria-label="Selecionar dia">
+            <option value="all">Todos os dias</option>
+          </select>
+        </div>
+        <div class="table-container">
+          <table class="clean-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Usos</th>
+                <th>Tempo Medio</th>
+                <th>Alertas</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>
