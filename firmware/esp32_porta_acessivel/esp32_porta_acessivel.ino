@@ -1,37 +1,29 @@
 /*
  * ======================================================================================
- * PROJETO DE EXTENSÃO — UNINASSAU (CAMPUS GRAÇAS - RECIFE/PE)
  * SISTEMA MULTISSENSORIAL DE SINALIZAÇÃO E ACESSIBILIDADE PARA PORTAS DE BANHEIRO
  * ======================================================================================
  *
  * Microcontrolador: ESP32 DOIT DevKit V1 (30 Pinos)
  *
  * --------------------------------------------------------------------------------------
- * 📚 BIBLIOTECAS NECESSÁRIAS NA ARDUINO IDE (Menu: Sketch -> Incluir Biblioteca -> Gerenciar Bibliotecas):
+ * BIBLIOTECAS NECESSÁRIAS NA ARDUINO IDE (Sketch -> Incluir Biblioteca -> Gerenciar Bibliotecas):
  * --------------------------------------------------------------------------------------
  * 1. MFRC522         (por GithubCommunity)      -> Leitura do módulo RFID RC522 via SPI
- * 2. ESP32Servo      (por Kevin Harrington)     -> Controle PWM do Micro Servo Motor SG90 no ESP32
+ * 2. ESP32Servo      (por Kevin Harrington)     -> Controle PWM do Micro Servo Motor SG90
  * 3. PubSubClient    (por Nick O'Leary)         -> Cliente MQTT para comunicação IoT
  * 4. ArduinoJson     (por Benoit Blanchon v6/v7)-> Formatação das mensagens JSON no MQTT
  *
- * *Bibliotecas nativas já inclusas no pacote ESP32:* <SPI.h>, <WiFi.h>
- *
  * --------------------------------------------------------------------------------------
- * ⚙️ CONFIGURAÇÃO DA PLACA NA ARDUINO IDE:
+ * RESUMO DA PINAGEM VALIDADA EM BANCADA (Conforme docs/GUIA_DE_MONTAGEM.md):
  * --------------------------------------------------------------------------------------
- * 1. Em Arquivo -> Preferências -> URLs Adicionais para Gerenciadores de Placas, adicione:
- *    https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
- * 2. Em Ferramentas -> Placa -> Gerenciador de Placas, instale "esp32 by Espressif Systems".
- * 3. Selecione a placa: "DOIT ESP32 DEVKIT V1" (ou "ESP32 Dev Module").
- * 4. Velocidade da Serial (Monitor Serial): 115200 baud.
- *
- * --------------------------------------------------------------------------------------
- * 🔌 RESUMO DA PINAGEM (Conforme docs/GUIA_DE_MONTAGEM.md):
- * --------------------------------------------------------------------------------------
- * - RFID RC522 (3.3V): SDA(SS)=GPIO 5 | SCK=GPIO 18 | MOSI=GPIO 23 | MISO=GPIO 19 | RST=GPIO 22
- * - Servo SG90 (5V):   Sinal=GPIO 13
- * - Vibração MV50(5V): IN/SIG=GPIO 27
- * - Buzzer Ativo (5V): I/O=GPIO 26
+ * - RFID RC522 (3.3V direto no 3V3):
+ *     SDA(SS)=GPIO 5 | SCK=GPIO 18 | MOSI=GPIO 23 | MISO=GPIO 19 | RST=GPIO 22 | GND=GND
+ * - Servo SG90 (Simulação da Tranca Física - 5V no VIN):
+ *     Sinal (Laranja)=GPIO 13 | VCC (Vermelho)=5V(VIN) | GND (Marrom)=GND
+ * - Motor de Vibração MV50 (Retorno Tátil - 5V no VIN):
+ *     IN/SIG=GPIO 27 | VCC=5V(VIN) | GND=GND
+ * - Módulo Buzzer Ativo 5V (Retorno Sonoro - Chaveamento diferencial 5V/3.3V):
+ *     VCC=5V(VIN) | I/O=GND | GND=GPIO 26 (LOW=5V apita / HIGH=1.7V mudo)
  * ======================================================================================
  */
 
@@ -46,38 +38,30 @@
 // ======================================================================================
 // 1. CONFIGURAÇÕES DE REDE WI-FI E BROKER MQTT
 // ======================================================================================
-const char* WIFI_SSID     = "SEU_WIFI_AQUI";       // Nome da rede Wi-Fi (ou Hotspot do celular)
-const char* WIFI_PASSWORD = "SUA_SENHA_WIFI_AQUI"; // Senha do Wi-Fi
+const char* WIFI_SSID      = "SEU_WIFI_AQUI";       // Nome da rede Wi-Fi 2.4GHz
+const char* WIFI_PASSWORD  = "SUA_SENHA_WIFI_AQUI"; // Senha do Wi-Fi
 
-// Broker MQTT:
-// - Para usar com a Dashboard Web sem instalar nada no PC, mantenha "broker.hivemq.com"
-// - Para usar com Mosquitto instalado localmente no notebook, troque pelo IP do PC (ex: "192.168.1.100")
-const char* MQTT_BROKER   = "broker.hivemq.com";
-const int   MQTT_PORT     = 1883;
-const char* MQTT_CLIENT_ID = "ESP32_PortaAcessivel_Uninassau_01";
+const char* MQTT_BROKER    = "broker.hivemq.com";
+const int   MQTT_PORT      = 1883;
+const char* MQTT_CLIENT_ID = "ESP32_PortaAcessivel_01";
 
-// Tópicos MQTT (Arquitetura ESP <-> MQTT <-> Computador)
-const char* TOPIC_ESTADO  = "uninassau/acessibilidade/banheiro01/estado";
-const char* TOPIC_COMANDO = "uninassau/acessibilidade/banheiro01/comando";
+// Tópicos MQTT (ESP32 <-> MQTT <-> Computador)
+const char* TOPIC_ESTADO   = "uninassau/acessibilidade/banheiro01/estado";
+const char* TOPIC_COMANDO  = "uninassau/acessibilidade/banheiro01/comando";
 
 // ======================================================================================
 // 2. DEFINIÇÃO DOS PINOS DO HARDWARE (ESP32 30 PINOS)
 // ======================================================================================
-// Pinos do Leitor RFID RC522 (Interface VSPI padrão)
 #define PIN_RFID_SS    5   // Pino SDA / SS do RC522 -> GPIO 5 (D5)
 #define PIN_RFID_RST   22  // Pino RST do RC522      -> GPIO 22 (D22)
-// SCK = GPIO 18 | MISO = GPIO 19 | MOSI = GPIO 23 (definidos automaticamente pelo SPI.begin())
+// SCK = GPIO 18 | MISO = GPIO 19 | MOSI = GPIO 23 (definidos pelo SPI.begin())
 
-// Pinos dos Atuadores Multissensoriais
-#define PIN_SERVO      13  // Fio Laranja do Servo SG90        -> GPIO 13 (D13)
-#define PIN_VIBRACAO   27  // Pino IN do Motor Vibração MV50   -> GPIO 27 (D27)
-#define PIN_BUZZER     26  // Pino I/O do Buzzer Ativo 5V      -> GPIO 26 (D26)
-#define PIN_LED_STATUS 2   // LED Azul interno do ESP32 (indica porta trancada)
+#define PIN_SERVO      13  // Fio Laranja do Servo SG90 (Tranca Física) -> GPIO 13 (D13)
+#define PIN_VIBRACAO   27  // Pino IN do Motor Vibração MV50            -> GPIO 27 (D27)
+#define PIN_BUZZER     26  // Pino GND do Módulo Buzzer Ativo 5V        -> GPIO 26 (D26)
+#define PIN_LED_STATUS 2   // LED Azul interno do ESP32 (aceso = porta trancada)
 
-// Configuração de polaridade do Buzzer (mude para false se o seu módulo for Active-Low)
-const bool BUZZER_ACTIVE_HIGH = true;
-
-// Ângulos do Servo Motor SG90 (Tranca Física)
+// Ângulos do Servo Motor SG90 (Simulação da Tranca Física da Porta)
 const int ANGULO_DESTRANCADO = 0;   // 0°  = Porta ABERTA / LIVRE
 const int ANGULO_TRANCADO    = 90;  // 90° = Porta FECHADA / OCUPADO
 
@@ -97,62 +81,77 @@ unsigned long ultimoAcionamentoMs = 0;      // Controle de debounce de 2s
 unsigned long inicioOcupacaoMs = 0;         // Marca o millis() em que a porta foi trancada
 unsigned long ultimaTentativaWifiMs = 0;    // Reconexão Wi-Fi não-bloqueante
 unsigned long ultimaTentativaMqttMs = 0;    // Reconexão MQTT não-bloqueante
-unsigned int contadorUsosSessao = 0;        // Quantidade de usos desde que o ESP32 ligou
+unsigned int contadorUsosSessao = 0;        // Quantidade de usos na sessão
 String ultimaTagUid = "NENHUMA";
 
 // ======================================================================================
-// 4. FUNÇÕES AUXILIARES DE ACIONAMENTO DOS ATUADORES (TÁTIL, SONORO E FÍSICO)
+// 4. FUNÇÕES DE ACIONAMENTO DOS ATUADORES (TRANCA SERVO, VIBRAÇÃO E BUZZER)
 // ======================================================================================
 
 /**
- * Liga ou desliga o Buzzer respeitando se o módulo é Active-High ou Active-Low.
+ * Liga ou desliga o Buzzer 5V no ESP32 (3.3V):
+ * Com VCC no 5V, I/O no GND e GND do Buzzer no D26:
+ * - Quando D26 = LOW (0V)   -> O Buzzer recebe 5V completos (5V - 0V = 5V) e APITA!
+ * - Quando D26 = HIGH (3.3V)-> Sobram apenas 1.7V no Buzzer (5V - 3.3V = 1.7V) e fica MUDO!
  */
 void definirEstadoBuzzer(bool ligado) {
-  if (BUZZER_ACTIVE_HIGH) {
-    digitalWrite(PIN_BUZZER, ligado ? HIGH : LOW);
+  pinMode(PIN_BUZZER, OUTPUT);
+  if (ligado) {
+    digitalWrite(PIN_BUZZER, LOW);  // 0V -> Libera os 5V para apitar
   } else {
-    digitalWrite(PIN_BUZZER, ligado ? LOW : HIGH);
+    digitalWrite(PIN_BUZZER, HIGH); // 3.3V -> Derruba a tensão para 1.7V (Silêncio total)
   }
 }
 
 /**
+ * Move o Servo SG90 (tranca física) para o ângulo exato (0° ou 90°) e desliga o pulso PWM
+ * (detach) após concluir o movimento para evitar tremores ou desvios de posição.
+ */
+void moverServoEstavel(int angulo) {
+  servoTranca.write(angulo);
+  if (!servoTranca.attached()) {
+    servoTranca.attach(PIN_SERVO, 500, 2400);
+  }
+  servoTranca.write(angulo);
+  delay(450); // Tempo para o braço do SG90 completar o giro físico
+  servoTranca.detach();
+  digitalWrite(PIN_SERVO, LOW);
+}
+
+/**
  * Executa o retorno multissensorial simultâneo ao TRANCAR a porta (Estado = FECHADA):
- * - Servo Motor gira para 90°
+ * - Servo Motor gira para 90° (Tranca fechada)
  * - Motor de Vibração aciona 1 pulso forte de 600ms
  * - Buzzer Ativo emite 1 bipe longo de 500ms
  */
 void acionarFeedbackTrancar() {
-  Serial.println(F("🔒 [ATUADORES] Trancando porta: Servo -> 90° | Vibracao -> 600ms | Buzzer -> 500ms"));
+  Serial.println(F("[ATUADORES] Trancando porta: Servo -> 90° | Vibracao -> 600ms | Buzzer -> 500ms"));
 
-  // 1. Aciona tranca física (Servo para 90 graus) e LED interno do ESP32
-  servoTranca.write(ANGULO_TRANCADO);
   digitalWrite(PIN_LED_STATUS, HIGH);
-
-  // 2. Inicia simultaneamente Vibração (600ms) e Buzzer (500ms)
   digitalWrite(PIN_VIBRACAO, HIGH);
   definirEstadoBuzzer(true);
 
-  delay(500); // Aguarda os 500ms do Buzzer
-  definirEstadoBuzzer(false); // Desliga o Buzzer em 500ms
+  moverServoEstavel(ANGULO_TRANCADO); // 450ms movendo o servo para 90°
 
-  delay(100); // Aguarda os 100ms restantes para completar os 600ms da Vibração
+  delay(50); // Completa os 500ms do Buzzer (450 + 50 = 500ms)
+  definirEstadoBuzzer(false);
+
+  delay(100); // Completa os 600ms da Vibração (500 + 100 = 600ms)
   digitalWrite(PIN_VIBRACAO, LOW);
 }
 
 /**
  * Executa o retorno multissensorial simultâneo ao DESTRANCAR a porta (Estado = ABERTA):
- * - Servo Motor retorna para 0°
+ * - Servo Motor retorna para 0° (Tranca aberta)
  * - Motor de Vibração aciona 2 pulsos curtos de 150ms
  * - Buzzer Ativo emite 2 bipes rápidos de 150ms
  */
 void acionarFeedbackDestrancar() {
-  Serial.println(F("🔓 [ATUADORES] Destrancando porta: Servo -> 0° | Vibracao -> 2x 150ms | Buzzer -> 2x 150ms"));
+  Serial.println(F("[ATUADORES] Destrancando porta: Servo -> 0° | Vibracao -> 2x 150ms | Buzzer -> 2x 150ms"));
 
-  // 1. Retorna tranca física (Servo para 0 graus) e apaga LED interno
-  servoTranca.write(ANGULO_DESTRANCADO);
   digitalWrite(PIN_LED_STATUS, LOW);
+  moverServoEstavel(ANGULO_DESTRANCADO);
 
-  // 2. Executa os 2 pulsos curtos simultâneos (Vibração + Buzzer de 150ms)
   for (int i = 0; i < 2; i++) {
     digitalWrite(PIN_VIBRACAO, HIGH);
     definirEstadoBuzzer(true);
@@ -171,10 +170,6 @@ void acionarFeedbackDestrancar() {
 // 5. PUBLICAÇÃO E RECEBIMENTO MQTT (JSON)
 // ======================================================================================
 
-/**
- * Publica o estado atual da porta no Broker MQTT em formato JSON,
- * além de enviar a string pura caso algum nó simples precise ler diretamente.
- */
 void publicarEstadoMqtt(unsigned long duracaoSegundos, const char* origemAcionamento) {
   StaticJsonDocument<256> doc;
 
@@ -190,56 +185,45 @@ void publicarEstadoMqtt(unsigned long duracaoSegundos, const char* origemAcionam
   char bufferJson[256];
   serializeJson(doc, bufferJson);
 
-  Serial.print(F("📡 [MQTT TX] Publicando em "));
+  Serial.print(F("[MQTT TX] Publicando em "));
   Serial.print(TOPIC_ESTADO);
   Serial.print(F(": "));
   Serial.println(bufferJson);
 
   if (mqttClient.connected()) {
-    // Publica com retain = true para que a Dashboard receba o estado atual assim que abrir
     mqttClient.publish(TOPIC_ESTADO, bufferJson, true);
   } else {
-    Serial.println(F("⚠️ [MQTT] Broker desconectado no momento. O funcionamento fisico continua normal."));
+    Serial.println(F("[MQTT] Broker desconectado no momento. Funcionamento fisico normal."));
   }
 }
 
-/**
- * Alterna o estado da porta (Toggle) ou define um estado específico,
- * acionando todos os atuadores e publicando no MQTT.
- */
 void alternarEstadoPorta(String uidTag, const char* origem) {
   portaFechada = !portaFechada;
   ultimaTagUid = uidTag;
 
   if (portaFechada) {
-    // Transição: ABERTA -> FECHADA (Trancar)
     inicioOcupacaoMs = millis();
     acionarFeedbackTrancar();
     publicarEstadoMqtt(0, origem);
-
-    Serial.println(F("🔴 ESTADO ATUAL: FECHADA / OCUPADO"));
+    Serial.println(F("ESTADO ATUAL: FECHADA / OCUPADO"));
   } else {
-    // Transição: FECHADA -> ABERTA (Destrancar)
     unsigned long duracaoSegundos = 0;
     if (inicioOcupacaoMs > 0) {
       duracaoSegundos = (millis() - inicioOcupacaoMs) / 1000;
-      if (duracaoSegundos == 0) duracaoSegundos = 1; // Mínimo de 1s para registro
+      if (duracaoSegundos == 0) duracaoSegundos = 1;
     }
     contadorUsosSessao++;
 
     acionarFeedbackDestrancar();
     publicarEstadoMqtt(duracaoSegundos, origem);
 
-    Serial.print(F("🟢 ESTADO ATUAL: ABERTA / LIVRE (Tempo ocupada: "));
+    Serial.print(F("ESTADO ATUAL: ABERTA / LIVRE (Tempo ocupada: "));
     Serial.print(duracaoSegundos);
     Serial.println(F(" segundos)"));
   }
   Serial.println(F("------------------------------------------------------------------"));
 }
 
-/**
- * Callback executado quando o ESP32 recebe um comando vindo do Computador/Dashboard via MQTT.
- */
 void callbackMqtt(char* topic, byte* payload, unsigned int length) {
   String mensagem = "";
   for (unsigned int i = 0; i < length; i++) {
@@ -247,18 +231,15 @@ void callbackMqtt(char* topic, byte* payload, unsigned int length) {
   }
   mensagem.trim();
 
-  Serial.print(F("📥 [MQTT RX] Comando recebido em "));
+  Serial.print(F("[MQTT RX] Comando recebido em "));
   Serial.print(topic);
   Serial.print(F(": "));
   Serial.println(mensagem);
 
-  // Verifica debounce também para comandos remotos
   if (millis() - ultimoAcionamentoMs < DEBOUNCE_RFID_MS) {
-    Serial.println(F("⏳ [DEBOUNCE] Aguarde 2 segundos entre acionamentos."));
     return;
   }
 
-  // Aceita tanto comando em texto puro ("TOGGLE", "ABRIR", "FECHAR") quanto JSON {"acao": "TOGGLE"}
   if (mensagem.indexOf("TOGGLE") >= 0 || mensagem.indexOf("SIMULAR_TAG") >= 0) {
     ultimoAcionamentoMs = millis();
     alternarEstadoPorta("REMOTO:DASHBOARD", "DASHBOARD_MQTT");
@@ -276,31 +257,27 @@ void callbackMqtt(char* topic, byte* payload, unsigned int length) {
 // ======================================================================================
 
 void gerenciarConexoesRede() {
-  // Se o usuário ainda não configurou o SSID real, ignora tentativas repetidas sem travar o RFID
   if (String(WIFI_SSID) == "SEU_WIFI_AQUI") {
     return;
   }
 
-  // 1. Verifica Wi-Fi a cada 10 segundos se desconectado
   if (WiFi.status() != WL_CONNECTED) {
     if (millis() - ultimaTentativaWifiMs > 10000) {
       ultimaTentativaWifiMs = millis();
-      Serial.print(F("📶 [WI-FI] Tentando conectar a rede: "));
+      Serial.print(F("[WI-FI] Conectando a rede: "));
       Serial.println(WIFI_SSID);
       WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     }
     return;
   }
 
-  // 2. Se Wi-Fi está conectado, verifica conexão com o Broker MQTT a cada 5 segundos
   if (!mqttClient.connected()) {
     if (millis() - ultimaTentativaMqttMs > 5000) {
       ultimaTentativaMqttMs = millis();
-      Serial.print(F("🔄 [MQTT] Conectando ao Broker "));
+      Serial.print(F("[MQTT] Conectando ao Broker "));
       Serial.print(MQTT_BROKER);
       Serial.print(F("... "));
 
-      // Cria ID único adicionando parte do MAC Address para evitar conflito em brokers públicos
       String clientId = String(MQTT_CLIENT_ID) + "_" + String((uint32_t)ESP.getEfuseMac(), HEX);
 
       if (mqttClient.connect(clientId.c_str())) {
@@ -322,9 +299,6 @@ void gerenciarConexoesRede() {
 // 7. LEITURA DO SENSOR RFID RC522
 // ======================================================================================
 
-/**
- * Converte os bytes do UID da Tag RFID para uma String hexadecimal (ex: "A1:B2:C3:D4").
- */
 String obterUidFormatado() {
   String uidStr = "";
   for (byte i = 0; i < rfid.uid.size; i++) {
@@ -341,16 +315,14 @@ String obterUidFormatado() {
 }
 
 void verificarLeituraRfid() {
-  // Verifica se há uma nova tag aproximada do leitor RC522
   if (!rfid.PICC_IsNewCardPresent() || !rfid.PICC_ReadCardSerial()) {
     return;
   }
 
   unsigned long agoraMs = millis();
 
-  // Aplica o Debounce de 2 segundos para evitar leituras duplicadas acidentais
   if (agoraMs - ultimoAcionamentoMs < DEBOUNCE_RFID_MS) {
-    Serial.println(F("⏳ [RFID] Leitura ignorada (Debounce de 2 segundos ativo)."));
+    Serial.println(F("[RFID] Leitura ignorada (Debounce de 2 segundos ativo)."));
     rfid.PICC_HaltA();
     rfid.PCD_StopCrypto1();
     return;
@@ -359,14 +331,12 @@ void verificarLeituraRfid() {
   ultimoAcionamentoMs = agoraMs;
   String uidLido = obterUidFormatado();
 
-  Serial.print(F("🏷️ [RFID] Tag detectada com sucesso! UID: "));
+  Serial.print(F("[RFID] Tag detectada com sucesso! UID: "));
   Serial.println(uidLido);
 
-  // Encerra comunicação criptográfica com a tag atual
   rfid.PICC_HaltA();
   rfid.PCD_StopCrypto1();
 
-  // Executa a alternância (Toggle) do estado da porta
   alternarEstadoPorta(uidLido, "ESP32_RFID");
 }
 
@@ -380,68 +350,57 @@ void setup() {
 
   Serial.println();
   Serial.println(F("=================================================================="));
-  Serial.println(F("  UNINASSAU — SISTEMA MULTISSENSORIAL DE PORTA DE BANHEIRO (ESP32)"));
+  Serial.println(F("  SISTEMA MULTISSENSORIAL DE PORTA DE BANHEIRO (ESP32 + MQTT)"));
   Serial.println(F("=================================================================="));
 
-  // 1. Configura pinos do Motor de Vibração, Buzzer e LED interno
   pinMode(PIN_VIBRACAO, OUTPUT);
-  pinMode(PIN_BUZZER, OUTPUT);
   pinMode(PIN_LED_STATUS, OUTPUT);
 
   digitalWrite(PIN_VIBRACAO, LOW);
   definirEstadoBuzzer(false);
   digitalWrite(PIN_LED_STATUS, LOW);
 
-  // 2. Inicializa o Micro Servo Motor SG90 na posição inicial (0° = ABERTA)
   ESP32PWM::allocateTimer(0);
-  servoTranca.setPeriodHertz(50); // Frequência padrão de 50Hz para servos SG90
-  servoTranca.attach(PIN_SERVO, 500, 2400);
-  servoTranca.write(ANGULO_DESTRANCADO);
-  Serial.println(F("✅ [SERVO SG90] Inicializado na posicao 0° (PORTA ABERTA)."));
+  servoTranca.setPeriodHertz(50);
+  moverServoEstavel(ANGULO_DESTRANCADO);
+  Serial.println(F("[SERVO SG90] Inicializado na posicao 0° (PORTA ABERTA)."));
 
-  // 3. Inicializa barramento SPI e módulo Leitor RFID RC522
-  SPI.begin(); // SCK=18, MISO=19, MOSI=23, SS=5
+  SPI.begin();
   rfid.PCD_Init();
   delay(50);
-  Serial.print(F("✅ [RFID RC522] Inicializado. Versao do Firmware RC522: 0x"));
+  Serial.print(F("[RFID RC522] Inicializado. Versao do Firmware RC522: 0x"));
   Serial.println(rfid.PCD_ReadRegister(rfid.VersionReg), HEX);
 
-  // 4. Inicializa Wi-Fi e configura cliente MQTT
   WiFi.mode(WIFI_STA);
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
   mqttClient.setCallback(callbackMqtt);
 
   if (String(WIFI_SSID) != "SEU_WIFI_AQUI") {
-    Serial.print(F("📶 [WI-FI] Conectando a "));
+    Serial.print(F("[WI-FI] Conectando a "));
     Serial.println(WIFI_SSID);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   } else {
-    Serial.println(F("ℹ️ [WI-FI] SSID padrao detectado. Configure WIFI_SSID para publicar no MQTT."));
+    Serial.println(F("[WI-FI] SSID padrao detectado. Configure WIFI_SSID para publicar no MQTT."));
   }
 
-  // Bipe curto de inicialização concluída (100ms)
   definirEstadoBuzzer(true);
   delay(100);
   definirEstadoBuzzer(false);
 
-  Serial.println(F("🟢 Sistema pronto! Aproxime uma Tag RFID do leitor RC522 para trancar/destrancar."));
+  Serial.println(F("Sistema pronto! Aproxime uma Tag RFID do leitor RC522 para trancar/destrancar."));
   Serial.println(F("------------------------------------------------------------------"));
 }
 
 void loop() {
-  // 1. Mantém conexão Wi-Fi e MQTT ativa sem bloquear a leitura da porta
   gerenciarConexoesRede();
-
-  // 2. Verifica continuamente se uma Tag RFID foi aproximada
   verificarLeituraRfid();
 
-  // 3. Permite testar também pelo Monitor Serial da Arduino IDE digitando 't' ou 'T'
   if (Serial.available() > 0) {
     char tecla = Serial.read();
     if (tecla == 't' || tecla == 'T') {
       if (millis() - ultimoAcionamentoMs >= DEBOUNCE_RFID_MS) {
         ultimoAcionamentoMs = millis();
-        Serial.println(F("⌨️ [SERIAL] Comando de teste recebido via Monitor Serial!"));
+        Serial.println(F("[SERIAL] Comando de teste recebido via Monitor Serial!"));
         alternarEstadoPorta("SERIAL:TESTE", "MONITOR_SERIAL");
       }
     }
